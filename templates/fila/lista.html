@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fila de atendimento | Clínica Nexo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  </head>
+  <body>
+    <div class="dashboard-shell">
+      <aside class="dashboard-sidebar">
+        <div class="brand-block compact">
+          <div class="brand-logo">CN</div>
+          <div><p class="eyebrow">{{ 'Médico' if current_user.perfil == 'medico' else 'Recepção' }}</p><h1>Clínica Nexo</h1></div>
+        </div>
+        <nav class="menu">
+          <a href="{{ url_for('auth.dashboard') }}" class="menu-item">Dashboard</a>
+          <a href="{{ url_for('agenda.listar') }}" class="menu-item">Agenda</a>
+          <a href="{{ url_for('fila.listar') }}" class="menu-item active">Fila</a>
+          {% if current_user.perfil == 'medico' %}
+            <a href="{{ url_for('atendimento.listar') }}" class="menu-item">Prontuário</a>
+          {% elif current_user.perfil == 'recepcionista' %}
+            <a href="{{ url_for('solicitacoes.listar') }}" class="menu-item">Solicitações</a>
+          {% endif %}
+        </nav>
+      </aside>
+      <main class="dashboard-main">
+        <header class="topbar dashboard-topbar">
+          <div>
+            <p class="eyebrow">{{ 'Médico' if current_user.perfil == 'medico' else 'Recepção' }}</p>
+            <h2>{{ 'Minha fila' if current_user.perfil == 'medico' else 'Monitoramento de filas' }}</h2>
+            <p>{{ data_atual.strftime('%d/%m/%Y') }}</p>
+          </div>
+          <div class="topbar-actions">
+            {% if pode_registrar_politica %}
+              <a class="secondary-btn" href="{{ url_for('fila.politica_prioridade') }}">Política de prioridade</a>
+            {% endif %}
+            <a class="secondary-btn" href="{{ url_for('fila.painel_publico') }}" target="_blank" rel="noopener">Abrir painel público</a>
+            <a class="secondary-btn" href="{{ url_for('agenda.listar') }}">Agenda</a>
+            <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" class="secondary-btn">Sair</button>
+            </form>
+          </div>
+        </header>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-group">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+        {% if pode_emitir and not politica_prioridade %}
+          <div class="flash info">As categorias prioritárias ainda não foram configuradas; as senhas serão emitidas como normais.</div>
+        {% endif %}
+        {% if pode_emitir and politica_prioridade and not politica_prioridade.aprovada %}
+          <div class="flash info">Prioridades especiais estão desativadas até a aprovação formal da política pela direção.</div>
+        {% endif %}
+        {% if pode_emitir %}
+          <section class="card-table-wrap" style="margin-bottom: 1.25rem;">
+          <h3>Agendamentos de hoje aguardando confirmação de chegada e senha</h3>
+          <table class="data-table">
+            <thead>
+              <tr><th>Horário</th><th>Paciente</th><th>Serviço</th><th>Médico</th><th>Sala</th><th>Prioridade</th><th>Ação</th></tr>
+            </thead>
+            <tbody>
+              {% for agendamento in agendamentos %}
+                <tr>
+                  <td>{{ agendamento.data_hora.strftime('%H:%M') }}</td>
+                  <td>{{ agendamento.paciente.nome_completo }}</td>
+                  <td>{{ agendamento.solicitacao.servico.nome }}</td>
+                  <td>{{ agendamento.medico.nome_exibicao }}</td>
+                  <td>{{ agendamento.sala.nome }}</td>
+                  <td>A definir na chegada</td>
+                  <td>
+                    <form method="POST" action="{{ url_for('fila.emitir', agendamento_id=agendamento.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                      {% if politica_prioridade and politica_prioridade.aprovada %}
+                        <label>Categoria prioritária (se aplicável)
+                          <select name="categoria_prioridade">
+                            <option value="">Normal</option>
+                            {% for codigo, nome in categorias_prioridade.items() %}
+                              {% if codigo in politica_prioridade.categorias_habilitadas %}
+                                <option value="{{ codigo }}">{{ nome }}</option>
+                              {% endif %}
+                            {% endfor %}
+                          </select>
+                        </label>
+                        <label>Data da doação (somente doador de sangue)
+                          <input type="date" name="data_doacao" />
+                        </label>
+                        <label class="checkbox-field">
+                          <input type="checkbox" name="comprovacao_conferida" />
+                          Comprovação necessária conferida pela recepção
+                        </label>
+                      {% endif %}
+                      <button type="submit" class="table-button">Confirmar chegada e emitir senha</button>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="7">Não há agendamentos de hoje aguardando emissão de senha.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+        {% endif %}
+        <section class="card-table-wrap">
+          <h3>Senhas emitidas</h3>
+          <table class="data-table">
+            <thead>
+              <tr><th>Ordem</th><th>Senha</th><th>Paciente</th><th>Tipo</th><th>Horário</th><th>Médico / Sala</th><th>Status</th><th>Ações</th></tr>
+            </thead>
+            <tbody>
+              {% for senha in senhas %}
+                <tr>
+                  {% set atendimento = atendimentos_por_senha.get(senha.id) %}
+                  <td>{{ senha.numero_ordem }}</td>
+                  <td><strong>{{ senha.codigo_exibicao }}</strong></td>
+                  <td>{{ senha.paciente.nome_completo }}</td>
+                  <td>{{ 'Preferencial' if senha.prioridade else 'Normal' }}</td>
+                  <td>{{ senha.data_hora.strftime('%H:%M') }}</td>
+                  <td>{{ senha.medico.nome_exibicao if senha.medico else '—' }} / {{ senha.sala.nome if senha.sala else '—' }}</td>
+                  <td><span class="status-badge {{ 'ativo' if senha.status == 'chamada' else 'inativo' }}">{{ senha.status.replace('_', ' ') }}</span></td>
+                  <td class="actions-cell">
+                    {% if senha.status == 'aguardando' %}
+                      {% if pode_chamar and senha.id == proxima_senha_id %}
+                        <form method="POST" action="{{ url_for('fila.chamar', senha_id=senha.id) }}">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                          <button type="submit" class="table-button">Chamar próximo</button>
+                        </form>
+                      {% endif %}
+                    {% endif %}
+                    {% if pode_chamar and senha.status in ('chamada', 'em_atendimento') and senha.medico_id == current_user.medico.id %}
+                      <form method="POST" action="{{ url_for('fila.concluir_manual', senha_id=senha.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <button type="submit" class="table-button">Concluir atendimento</button>
+                      </form>
+                    {% endif %}
+                    {% if pode_emitir and senha.status in ('aguardando', 'chamada') %}
+                      <form method="POST" action="{{ url_for('fila.nao_compareceu', senha_id=senha.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <button type="submit" class="table-button">Não compareceu</button>
+                      </form>
+                    {% endif %}
+                    {% if pode_emitir %}
+                      <a class="table-link" href="{{ url_for('fila.imprimir', senha_id=senha.id) }}" target="_blank" rel="noopener">Imprimir senha</a>
+                    {% endif %}
+                    {% if pode_chamar and senha.status == 'atendido' and atendimento and atendimento.prontuario %}
+                      <a class="table-link" href="{{ url_for('atendimento.imprimir', atendimento_id=atendimento.id) }}">Imprimir Receita / Prontuário</a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="8">Nenhuma senha emitida hoje.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

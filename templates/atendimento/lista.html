@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Prontuários | Clínica Nexo{% endblock %}
+
+{% block content %}
+  <div class="dashboard-shell">
+    <aside class="dashboard-sidebar">
+      <div class="brand-block compact">
+        <div class="brand-logo">CN</div>
+        <div><p class="eyebrow">Médico</p><h1>Clínica Nexo</h1></div>
+      </div>
+      <nav class="menu">
+        <a href="{{ url_for('auth.dashboard') }}" class="menu-item">Dashboard</a>
+        <a href="{{ url_for('fila.listar') }}" class="menu-item">Minha fila</a>
+        <a href="{{ url_for('agenda.listar') }}" class="menu-item">Agenda</a>
+        <a href="{{ url_for('atendimento.listar') }}" class="menu-item active">Prontuário</a>
+      </nav>
+    </aside>
+    <main class="dashboard-main">
+      <header class="topbar dashboard-topbar">
+        <div>
+          <p class="eyebrow">Acesso restrito ao médico responsável</p>
+          <h2>Prontuários</h2>
+        </div>
+        <div class="topbar-actions">
+          <a class="secondary-btn" href="{{ url_for('fila.listar') }}">Minha fila</a>
+        </div>
+      </header>
+      <section class="card-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Data</th><th>Paciente</th><th>Status</th><th>Ação</th></tr>
+          </thead>
+          <tbody>
+            {% for atendimento in atendimentos %}
+              <tr>
+                <td>{{ atendimento.data_inicio.strftime('%d/%m/%Y %H:%M') }}</td>
+                <td>{{ atendimento.paciente.nome_completo }}</td>
+                <td>{{ atendimento.status.replace('_', ' ') }}</td>
+                <td class="actions-cell">
+                  {% if atendimento.status == 'em_andamento' %}
+                    <a class="table-link" href="{{ url_for('atendimento.prontuario', atendimento_id=atendimento.id) }}">Preencher prontuário</a>
+                  {% elif atendimento.prontuario %}
+                    <a class="table-link" href="{{ url_for('atendimento.prontuario', atendimento_id=atendimento.id) }}">Abrir prontuário</a>
+                  {% else %}
+                    <span>Sem prontuário registrado</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4">Você ainda não possui atendimentos registrados.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+{% endblock %}

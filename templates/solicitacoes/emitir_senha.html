@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emitir senha | Clínica Nexo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  </head>
+  <body>
+    <div class="dashboard-shell">
+      <aside class="dashboard-sidebar">
+        <div class="brand-block compact">
+          <div class="brand-logo">CN</div>
+          <div>
+            <p class="eyebrow">Recepção</p>
+            <h1>Clínica Nexo</h1>
+          </div>
+        </div>
+        <nav class="menu">
+          <a href="{{ url_for('auth.dashboard') }}" class="menu-item">Dashboard</a>
+          <a href="{{ url_for('solicitacoes.listar') }}" class="menu-item active">Atendimentos e pagamentos</a>
+          <a href="{{ url_for('fila.listar') }}" class="menu-item">Fila</a>
+        </nav>
+      </aside>
+      <main class="dashboard-main">
+        <header class="topbar dashboard-topbar">
+          <div>
+            <p class="eyebrow">Pagamento confirmado</p>
+            <h2>Emitir senha para atendimento de hoje</h2>
+          </div>
+          <div class="topbar-actions">
+            <a class="secondary-btn" href="{{ url_for('solicitacoes.listar') }}">Voltar</a>
+          </div>
+        </header>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-group">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <section class="form-card">
+          <div class="summary-box">
+            <p><strong>Pagamento:</strong> Confirmado pelo setor financeiro</p>
+            <p><strong>Código:</strong> {{ solicitacao.codigo }}</p>
+            <p><strong>Paciente:</strong> {{ solicitacao.paciente.nome_completo }}</p>
+            <p><strong>Atendimento:</strong> {{ solicitacao.servico.nome }}</p>
+            <p><strong>Valor:</strong> R$ {{ '%.2f'|format(solicitacao.valor_snapshot)|replace('.', ',') }}</p>
+            {% if horario_atendimento %}
+              <p><strong>Previsão de início:</strong> {{ horario_atendimento.strftime('%H:%M') }}</p>
+            {% endif %}
+          </div>
+
+          {% if not horario_atendimento %}
+            <div class="flash info">Não há médicos ativos desta especialidade com sala disponível neste momento.</div>
+          {% elif not medicos %}
+            <div class="flash info">Não há médicos ativos desta especialidade com sala disponível no próximo horário.</div>
+          {% else %}
+            <form method="POST" class="user-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <div class="field-grid">
+                <label class="full-width">
+                  Médico disponível
+                  <select name="medico_id" required>
+                    <option value="">Selecione...</option>
+                    {% for medico in medicos %}
+                      <option value="{{ medico.id }}" {% if form_data.get('medico_id') == medico.id|string %}selected{% endif %}>
+                        {{ medico.nome_exibicao }} — {{ medico.sala.nome }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </label>
+
+                {% if politica_prioridade and politica_prioridade.aprovada %}
+                  <label class="full-width">
+                    Categoria prioritária (se aplicável)
+                    <select name="categoria_prioridade">
+                      <option value="">Normal</option>
+                      {% for codigo, nome in categorias_prioridade.items() %}
+                        {% if codigo in politica_prioridade.categorias_habilitadas %}
+                          <option value="{{ codigo }}" {% if form_data.get('categoria_prioridade') == codigo %}selected{% endif %}>{{ nome }}</option>
+                        {% endif %}
+                      {% endfor %}
+                    </select>
+                  </label>
+                  <label>
+                    Data da doação (somente doador de sangue)
+                    <input type="date" name="data_doacao" value="{{ form_data.get('data_doacao', '') }}" />
+                  </label>
+                  <label class="checkbox-field">
+                    <input type="checkbox" name="comprovacao_conferida" {% if form_data.get('comprovacao_conferida') == 'on' %}checked{% endif %} />
+                    Comprovação necessária conferida pela recepção
+                  </label>
+                {% endif %}
+              </div>
+              <div class="notice-card">
+                <strong>O médico chamará o paciente pela senha.</strong>
+                <p>A senha será vinculada à fila do médico escolhido. Ele poderá chamá-la quando estiver conectado ao sistema.</p>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary-btn">Emitir senha e imprimir</button>
+              </div>
+            </form>
+          {% endif %}
+
+          {% if not medicos or not horario_atendimento %}
+            <div class="form-actions">
+              <a class="secondary-btn" href="{{ url_for('agenda.agendar') }}">Agendar para outra data</a>
+            </div>
+          {% endif %}
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
